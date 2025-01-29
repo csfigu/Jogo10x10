@@ -26,6 +26,12 @@ class NumberPuzzleGUI:
         # Font for numbers
         self.number_font = tkFont.Font(family="Helvetica", size=12, weight="bold")
 
+        # Load configuration
+        with open('config.json') as f:
+            config = json.load(f)
+            self.themes = config['themes']
+            self.board_sizes = config['board_sizes']
+        
         # Theme colors
         self.themes = {
             "dark": {
@@ -51,7 +57,7 @@ class NumberPuzzleGUI:
 
         # Option Menu for Board Size
         self.size_var = tk.StringVar(value="Standard (10x10)")
-        size_options = ["Small (5x5)", "Standard (10x10)"]
+        size_options = list(self.board_sizes.keys())
         size_menu = tk.OptionMenu(self.main_frame, self.size_var, *size_options, command=self.set_board_size)
         size_menu.pack(pady=10)
 
@@ -64,9 +70,13 @@ class NumberPuzzleGUI:
         self.label_time = tk.Label(self.main_frame, text="Time: 0 s")
         self.label_time.pack(pady=5)
 
+        # Move Counter
+        self.move_counter = tk.Label(self.main_frame, text="Moves: 0")
+        self.move_counter.pack(pady=5)
+
         # New Game Button
         self.btn_new_game = tk.Button(self.main_frame, text="New Game", command=self.start_new_game)
-        self.btn_new_game.pack(pady=10)
+        self.btn_new_game.pack(pady=5)
 
         # Theme Switch Button
         self.btn_theme = tk.Button(self.main_frame, text="Dark Theme", command=self.switch_theme)
@@ -75,6 +85,10 @@ class NumberPuzzleGUI:
         # Board Frame
         self.board_frame = tk.Frame(self.main_frame)
         self.board_frame.pack()
+
+        # Undo Button
+        self.btn_undo = tk.Button(self.main_frame, text="Undo", command=self.undo_move, state=tk.DISABLED)
+        self.btn_undo.pack(pady=5)
 
         # Score Sidebar
         self.score_frame = tk.Frame(self.window, width=250)
@@ -192,6 +206,8 @@ class NumberPuzzleGUI:
             self.moves.append((row, col))
             self.current_number += 1
             self.label_info.config(text=f"Current Number: {self.current_number}")
+            self.move_counter.config(text=f"Moves: {len(self.moves)}")
+            self.highlight_valid_moves()
             self.update_timer()
             return
 
@@ -210,6 +226,8 @@ class NumberPuzzleGUI:
         self.moves.append((row,col))
         self.current_number += 1
         self.label_info.config(text=f"Current Number: {self.current_number}")
+        self.move_counter.config(text=f"Moves: {len(self.moves)}")
+        self.highlight_valid_moves()
         self.update_timer()
 
         if not self.get_possible_moves():
@@ -227,6 +245,7 @@ class NumberPuzzleGUI:
         for row in range(self.size):
             for col in range(self.size):
                 self.buttons[row][col].config(text=" ", bg=self.themes[self.current_theme]["button_bg"], fg=self.themes[self.current_theme]["button_fg"])
+        self.btn_undo.config(state=tk.DISABLED)
 
         self.label_info.config(text="Click to start placing '1'")
         self.label_time.config(text="Time: 0 s")
@@ -241,11 +260,11 @@ class NumberPuzzleGUI:
     def get_color(self, number):
       # Normalize the number to the range [0, 1]
       normalized_number = min(1, (number -1) / (self.size * self.size))
-      # Calculate RGB values using a linear interpolation between blue and red
+      # Calculate bright red color with varying intensity
       red = int(255 * normalized_number)
-      blue = int(255 * (1 - normalized_number))
+      intensity = int(200 + (55 * normalized_number))  # Range from 200-255
       
-      return f"#{red:02x}00{blue:02x}" # Returns hex string
+      return f"#{intensity:02x}0000" # Returns bright red hex string
 
     def end_game(self):
         self.game_over = True
@@ -314,6 +333,33 @@ class NumberPuzzleGUI:
 
     def run(self):
         self.window.mainloop()
+
+    def highlight_valid_moves(self):
+        valid_moves = self.get_possible_moves()
+        for row in range(self.size):
+            for col in range(self.size):
+                if (row, col) in valid_moves:
+                    self.buttons[row][col].config(bg="#90EE90")
+                else:
+                    self.buttons[row][col].config(bg=self.themes[self.current_theme]["button_bg"])
+        self.btn_undo.config(state=tk.NORMAL if len(self.moves) > 0 else tk.DISABLED)
+
+    def undo_move(self):
+        if len(self.moves) > 1:
+            # Remove last move
+            last_row, last_col = self.moves.pop()
+            self.board[last_row][last_col] = 0
+            self.buttons[last_row][last_col].config(text=" ", 
+                bg=self.themes[self.current_theme]["button_bg"])
+            self.current_number -= 1
+            
+            # Update current position
+            self.current_position = self.moves[-1] if self.moves else None
+            
+            # Update displays
+            self.label_info.config(text=f"Current Number: {self.current_number}")
+            self.move_counter.config(text=f"Moves: {len(self.moves)}")
+            self.highlight_valid_moves()
 
 if __name__ == "__main__":
     game = NumberPuzzleGUI()

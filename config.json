@@ -1,0 +1,22 @@
+{
+  "themes": {
+    "dark": {
+      "bg": "#333333",
+      "fg": "white",
+      "button_bg": "#555555",
+      "button_fg": "white",
+      "button_active_bg": "#777777"
+    },
+    "white": {
+      "bg": "white",
+      "fg": "black",
+      "button_bg": "SystemButtonFace",
+      "button_fg": "black",
+      "button_active_bg": "#e0e0e0"
+    }
+  },
+  "board_sizes": {
+    "Small (5x5)": 5,
+    "Standard (10x10)": 10
+  }
+}

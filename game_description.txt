@@ -1,0 +1,32 @@
+Number Puzzle Game - 10x10/5x5 Board
+
+Objective:
+Complete the sequence by placing numbers 1 through N (where N = board size squared) on the grid using knight-like moves.
+
+Gameplay Features:
+- Two board sizes: 5x5 and 10x10 grids
+- Valid moves combine chess knight (L-shaped) and king moves
+- Progressive color gradient for number visualization
+- Light/dark theme support
+- Real-time scoring and timing
+- Persistent high score system with initials entry
+- Separate leaderboards for each board size
+
+Technical Implementation:
+- Built with Python Tkinter GUI framework
+- JSON-based score storage
+- Responsive grid layout with dynamic board generation
+- Theme system with color customization
+- Input validation and error handling
+
+Rules:
+1. Start by placing '1' anywhere
+2. Subsequent numbers must be placed using valid moves:
+   - Straight: 3 squares in any cardinal direction
+   - Diagonal: 2 squares in any diagonal direction
+3. Game ends when no valid moves remain
+
+Scoring:
+- Final score = highest consecutive number placed
+- Scores tracked separately for each board size
+- Top 10 scores saved per board type
