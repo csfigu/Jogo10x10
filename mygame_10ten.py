@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox
 import time
 import json
+import math
 import tkinter.font as tkFont
 from tkinter import simpledialog  # Correct import for simpledialog
 
@@ -202,7 +203,11 @@ class NumberPuzzleGUI:
             self.start_time = time.time()
             self.board[row][col] = self.current_number
             self.current_position = (row, col)
-            self.buttons[row][col].config(text=str(self.current_number), fg="white", bg=self.get_color(self.current_number))
+            self.buttons[row][col].config(
+                text=str(self.current_number), 
+                fg=self.themes[self.current_theme]["button_fg"], 
+                bg=self.get_color(self.current_number)
+            )
             self.moves.append((row, col))
             self.current_number += 1
             self.label_info.config(text=f"Current Number: {self.current_number}")
@@ -222,8 +227,12 @@ class NumberPuzzleGUI:
 
         self.board[row][col] = self.current_number
         self.current_position = (row, col)
-        self.buttons[row][col].config(text=str(self.current_number), fg="white", bg=self.get_color(self.current_number))
-        self.moves.append((row,col))
+        self.buttons[row][col].config(
+            text=str(self.current_number), 
+            fg=self.themes[self.current_theme]["button_fg"], 
+            bg=self.get_color(self.current_number)
+        )
+        self.moves.append((row, col))
         self.current_number += 1
         self.label_info.config(text=f"Current Number: {self.current_number}")
         self.move_counter.config(text=f"Moves: {len(self.moves)}")
@@ -258,13 +267,33 @@ class NumberPuzzleGUI:
             self.window.after(100, self.update_timer)
 
     def get_color(self, number):
-      # Normalize the number to the range [0, 1]
-      normalized_number = min(1, (number -1) / (self.size * self.size))
-      # Calculate bright red color with varying intensity
-      red = int(255 * normalized_number)
-      intensity = int(200 + (55 * normalized_number))  # Range from 200-255
-      
-      return f"#{intensity:02x}0000" # Returns bright red hex string
+        """Generate color gradient from cold blue to hot red"""
+        max_value = self.size * self.size
+        progress = (number - 1) / (max_value - 1) if max_value > 1 else 0
+        
+        # Color transition: blue (240°) to red (0°)
+        hue = 240 - (progress * 240)
+        saturation = 0.7 + (progress * 0.3)  # 70-100%
+        value = 0.8 + (progress * 0.2)       # 80-100%
+        
+        # Convert HSV to RGB
+        h = hue / 360
+        i = math.floor(h * 6)
+        f = h * 6 - i
+        p = value * (1 - saturation)
+        q = value * (1 - f * saturation)
+        t = value * (1 - (1 - f) * saturation)
+
+        i = i % 6
+        if i == 0: r, g, b = value, t, p
+        elif i == 1: r, g, b = q, value, p
+        elif i == 2: r, g, b = p, value, t
+        elif i == 3: r, g, b = p, q, value
+        elif i == 4: r, g, b = t, p, value
+        else: r, g, b = value, p, q
+
+        # Convert to hex color
+        return f'#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}'
 
     def end_game(self):
         self.game_over = True
@@ -321,6 +350,8 @@ class NumberPuzzleGUI:
         for row in self.buttons:
             for button in row:
                 button.config(bg=theme["button_bg"], fg=theme["button_fg"], activebackground=theme["button_active_bg"])
+                if button["text"] != " ":
+                    button.config(fg=theme["button_fg"])
 
     def switch_theme(self):
         if self.current_theme == "white":
@@ -342,7 +373,7 @@ class NumberPuzzleGUI:
                     self.buttons[row][col].config(bg="#90EE90")
                 else:
                     self.buttons[row][col].config(bg=self.themes[self.current_theme]["button_bg"])
-        self.btn_undo.config(state=tk.NORMAL if len(self.moves) > 0 else tk.DISABLED)
+        self.btn_undo.config(state=tk.NORMAL if len(self.moves) > 1 else tk.DISABLED)
 
     def undo_move(self):
         if len(self.moves) > 1:
