@@ -23,6 +23,16 @@ class NumberPuzzleGUI:
         self.window = tk.Tk()
         self.window.title("Number Puzzle")
         self.window.resizable(False, False)
+        
+        # Key bindings for movement
+        self.window.bind("<Up>", lambda e: self.move_by_key(-3, 0))
+        self.window.bind("<Down>", lambda e: self.move_by_key(3, 0))
+        self.window.bind("<Left>", lambda e: self.move_by_key(0, -3))
+        self.window.bind("<Right>", lambda e: self.move_by_key(0, 3))
+        self.window.bind("q", lambda e: self.move_by_key(-2, -2))
+        self.window.bind("w", lambda e: self.move_by_key(-2, 2))
+        self.window.bind("a", lambda e: self.move_by_key(2, -2))
+        self.window.bind("s", lambda e: self.move_by_key(2, 2))
 
         # Font for numbers
         self.number_font = tkFont.Font(family="Helvetica", size=12, weight="bold")
@@ -90,6 +100,11 @@ class NumberPuzzleGUI:
         # Undo Button
         self.btn_undo = tk.Button(self.main_frame, text="Undo", command=self.undo_move, state=tk.DISABLED)
         self.btn_undo.pack(pady=5)
+
+        # Auto Play Button
+        self.auto_playing = False
+        self.btn_auto = tk.Button(self.main_frame, text="Auto Play", command=self.toggle_auto_play)
+        self.btn_auto.pack(pady=5)
 
         # Score Sidebar
         self.score_frame = tk.Frame(self.window, width=250)
@@ -196,6 +211,15 @@ class NumberPuzzleGUI:
                 possible_moves.append((next_row, next_col))
         return possible_moves
     
+    def move_by_key(self, dr, dc):
+        if self.game_over or self.current_position is None:
+            return
+        row, col = self.current_position
+        next_row = row + dr
+        next_col = col + dc
+        if self.is_valid_move(next_row, next_col):
+            self.make_move(next_row, next_col)
+
     def make_move(self, row, col):
         if self.game_over:
             return
@@ -250,6 +274,8 @@ class NumberPuzzleGUI:
         self.moves = []
         self.start_time = 0
         self.elapsed_time = 0
+        self.auto_playing = False
+        self.btn_auto.config(text="Auto Play")
 
         for row in range(self.size):
             for col in range(self.size):
@@ -297,10 +323,175 @@ class NumberPuzzleGUI:
 
     def end_game(self):
         self.game_over = True
+        self.auto_playing = False
         self.elapsed_time = int(time.time() - self.start_time)
         score = self.current_number - 1
         self.label_time.config(text=f"Time: {self.elapsed_time} s")
         self.window.after(0, lambda: self.check_high_score(score, self.elapsed_time))
+        self.btn_auto.config(text="Auto Play")
+
+    def toggle_auto_play(self):
+        if self.game_over:
+            return
+        self.auto_playing = not self.auto_playing
+        if self.auto_playing:
+            self.btn_auto.config(text="Stop Auto Play")
+            self.make_auto_move()
+        else:
+            self.btn_auto.config(text="Auto Play")
+
+    def make_auto_move(self):
+        if not self.auto_playing or self.game_over:
+            return
+
+        possible_moves = self.get_possible_moves()
+        if not possible_moves:
+            self.end_game()
+            return
+
+        # Enhanced move analysis
+        move_analysis = []
+        for move in possible_moves:
+            row, col = move
+            analysis = {
+                "position": (row, col),
+                "center_distance": abs(row - self.size//2) + abs(col - self.size//2),
+                "future_moves": self.count_future_moves(move),
+                "board_coverage": self.calculate_board_coverage(move),
+                "corner_proximity": self.is_corner_move(row, col)
+            }
+            move_analysis.append(analysis)
+
+        # Choose best move using weighted scoring
+        best_move = None
+        best_score = float('-inf')
+        
+        for analysis in move_analysis:
+            move_score = (
+                analysis["future_moves"] * 10 +          # Weight future moves heavily
+                (10 - analysis["center_distance"]) * 2 + # Prefer central positions
+                analysis["board_coverage"] * 5 -         # Consider board coverage
+                analysis["corner_proximity"] * 3         # Slightly avoid corners
+            )
+            
+            if move_score > best_score:
+                best_score = move_score
+                best_move = analysis["position"]
+
+        if best_move:
+            # Log the move decision
+            self.log_move_analysis({
+                "turn": self.current_number,
+                "chosen_move": best_move,
+                "analyzed_moves": move_analysis,
+                "best_score": best_score,
+                "board_state": [row[:] for row in self.board],
+                "timestamp": time.time()
+            })
+            
+            self.make_move(*best_move)
+            if self.auto_playing:
+                self.window.after(500, self.make_auto_move)
+
+    def calculate_board_coverage(self, move):
+        """Calculate how well a move contributes to board coverage"""
+        row, col = move
+        coverage = 0
+        for r in range(max(0, row-2), min(self.size, row+3)):
+            for c in range(max(0, col-2), min(self.size, col+3)):
+                if self.board[r][c] == 0:
+                    coverage += 1
+        return coverage / (self.size * self.size)
+
+    def is_corner_move(self, row, col):
+        """Determine if a move is near a corner"""
+        corner_distance = min(
+            abs(row) + abs(col),
+            abs(row) + abs(col - self.size + 1),
+            abs(row - self.size + 1) + abs(col),
+            abs(row - self.size + 1) + abs(col - self.size + 1)
+        )
+        return 1 if corner_distance <= 2 else 0
+
+    def calculate_quadrant_progress(self, quadrant):
+        """Calculate progress in completing current quadrant"""
+        row_start = quadrant[0] * (self.size//2)
+        col_start = quadrant[1] * (self.size//2)
+        filled = 0
+        total = (self.size//2) ** 2
+        
+        for r in range(row_start, row_start + self.size//2):
+            for c in range(col_start, col_start + self.size//2):
+                if self.board[r][c] != 0:
+                    filled += 1
+        return filled / total
+
+    def calculate_buffer_score(self, row, col):
+        """Calculate buffer zone status score"""
+        # Buffer zones are every 10th row
+        buffer_rows = [i for i in range(0, self.size, 10)]
+        if row in buffer_rows:
+            # Prefer moves that don't block buffer rows
+            return -1 if self.current_number < 90 else 1
+        return 0
+
+    def calculate_transition_score(self, row, col):
+        """Calculate transition lane availability score"""
+        # Transition lanes are vertical columns spaced every 5 columns
+        transition_cols = [i for i in range(0, self.size, 5)]
+        if col in transition_cols:
+            # Prefer moves that preserve transition lanes
+            return 1 if self.current_number < 80 else -1
+        return 0
+
+    def log_move_analysis(self, analysis_data):
+        """Log move analysis data to JSON file"""
+        log_file = "autoplay_logs.json"
+        try:
+            # Convert board state to serializable format
+            analysis_data["board_state"] = [
+                [int(cell) for cell in row] 
+                for row in analysis_data["board_state"]
+            ]
+            
+            # Load existing logs
+            try:
+                with open(log_file, 'r') as f:
+                    logs = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                logs = []
+                
+            # Add new analysis
+            logs.append(analysis_data)
+            
+            # Save updated logs
+            with open(log_file, 'w') as f:
+                json.dump(logs, f, indent=2)
+        except Exception as e:
+            print(f"Error logging move analysis: {e}")
+
+    def count_future_moves(self, position):
+        """Count how many moves would be available after making this move"""
+        row, col = position
+        temp_board = [row[:] for row in self.board]
+        temp_board[row][col] = self.current_number
+        
+        # Calculate possible moves from this new position
+        future_moves = []
+        # Straight moves
+        moves_straight = [(0, -3), (0, 3), (-3, 0), (3, 0)]
+        for dr, dc in moves_straight:
+            next_row, next_col = row + dr, col + dc
+            if self.is_valid_position(next_row, next_col) and temp_board[next_row][next_col] == 0:
+                future_moves.append((next_row, next_col))
+        # Diagonal moves
+        moves_diagonal = [(-2, -2), (-2, 2), (2, -2), (2, 2)]
+        for dr, dc in moves_diagonal:
+            next_row, next_col = row + dr, col + dc
+            if self.is_valid_position(next_row, next_col) and temp_board[next_row][next_col] == 0:
+                future_moves.append((next_row, next_col))
+        
+        return len(future_moves)
 
     def check_high_score(self, score, elapsed_time):
         board_key = f"{self.size}x{self.size}"
