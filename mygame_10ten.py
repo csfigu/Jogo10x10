@@ -21,51 +21,26 @@ class NumberPuzzleGUI:
         self.top_scores = self.load_scores()
 
         self.window = tk.Tk()
-        self.window.title("Number Puzzle")
-        self.window.resizable(False, False)
+        self.window.title("Number Puzzle 10x10")
         
-        # Key bindings for movement
-        self.window.bind("<Up>", lambda e: self.move_by_key(-3, 0))
-        self.window.bind("<Down>", lambda e: self.move_by_key(3, 0))
-        self.window.bind("<Left>", lambda e: self.move_by_key(0, -3))
-        self.window.bind("<Right>", lambda e: self.move_by_key(0, 3))
-        self.window.bind("q", lambda e: self.move_by_key(-2, -2))
-        self.window.bind("w", lambda e: self.move_by_key(-2, 2))
-        self.window.bind("a", lambda e: self.move_by_key(2, -2))
-        self.window.bind("s", lambda e: self.move_by_key(2, 2))
-
-        # Font for numbers
-        self.number_font = tkFont.Font(family="Helvetica", size=12, weight="bold")
-
-        # Load configuration
-        with open('config.json') as f:
-            config = json.load(f)
-            self.themes = config['themes']
-            self.board_sizes = config['board_sizes']
+        # Make window resizable
+        self.window.resizable(True, True)
         
-        # Theme colors
-        self.themes = {
-            "dark": {
-                "bg": "#333333",
-                "fg": "white",
-                "button_bg": "#555555",
-                "button_fg": "white",
-                "button_active_bg": "#777777",
-            },
-            "white": {
-                "bg": "white",
-                "fg": "black",
-                "button_bg": "SystemButtonFace",
-                "button_fg": "black",
-                 "button_active_bg": "#e0e0e0",
-            },
-        }
-        self.current_theme = "white"  # Default theme
+        # Set minimum window size
+        self.window.minsize(400, 450)
+        
+        # Configure grid weights for main window
+        self.window.grid_columnconfigure(0, weight=1)
+        self.window.grid_rowconfigure(0, weight=1)
         
         # Main Frame
         self.main_frame = tk.Frame(self.window)
-        self.main_frame.pack(side=tk.LEFT, padx=10, pady=10)
-
+        self.main_frame.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
+        
+        # Configure grid weights for main frame
+        self.main_frame.grid_columnconfigure(0, weight=1)
+        self.main_frame.grid_rowconfigure(0, weight=1)
+        
         # Option Menu for Board Size
         self.size_var = tk.StringVar(value="Standard (10x10)")
         size_options = list(self.board_sizes.keys())
@@ -95,7 +70,12 @@ class NumberPuzzleGUI:
 
         # Board Frame
         self.board_frame = tk.Frame(self.main_frame)
-        self.board_frame.pack()
+        self.board_frame.grid(row=1, column=0, sticky='nsew')
+        
+        # Configure grid weights for board frame
+        for i in range(self.size):
+            self.board_frame.grid_columnconfigure(i, weight=1)
+            self.board_frame.grid_rowconfigure(i, weight=1)
 
         # Undo Button
         self.btn_undo = tk.Button(self.main_frame, text="Undo", command=self.undo_move, state=tk.DISABLED)
@@ -157,7 +137,7 @@ class NumberPuzzleGUI:
            for col in range(self.size):
               button = tk.Button(self.board_frame, text=" ", width=4, height=2,
                                  command=lambda r=row, c=col: self.make_move(r, c), font=self.number_font)
-              button.grid(row=row, column=col, padx=2, pady=2)
+              button.grid(row=row, column=col, padx=2, pady=2, sticky='nsew')
               button_row.append(button)
            self.buttons.append(button_row)
         self.apply_theme()
