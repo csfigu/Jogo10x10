@@ -22,6 +22,7 @@ import tkinter.font as tkFont
 from tkinter import simpledialog  # Correct import for simpledialog
 from collections import defaultdict
 import statistics
+import pygame  # Added for simple music playback
 
 class MoveAnalyzer:
     def __init__(self):
@@ -89,6 +90,15 @@ class NumberPuzzleGUI:
         self.window.title("Number Puzzle 10x10")
         # Bind keyboard events:
         self.bind_keys()
+        
+        # Initialize and play background music
+        try:
+            pygame.mixer.init()
+            music_file = os.path.join(os.path.dirname(__file__), "background.mp3")
+            pygame.mixer.music.load(music_file)
+            pygame.mixer.music.play(-1)  # Loop indefinitely
+        except Exception as e:
+            print("Error playing music:", e)
         
         # Make window resizable
         self.window.resizable(True, True)
