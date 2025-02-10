@@ -1,6 +1,17 @@
 import os
-os.environ['TCL_LIBRARY'] = r'C:\Users\Dell\AppData\Local\Programs\Python\Python313\tcl\tcl8.6'
-os.environ['TK_LIBRARY'] = r'C:\Users\Dell\AppData\Local\Programs\Python\Python313\tcl\tk8.6'
+import sys
+
+# Try to find Python's TCL/TK libraries
+python_path = os.path.dirname(sys.executable)
+tcl_path = os.path.join(python_path, "tcl", "tcl8.6")
+tk_path = os.path.join(python_path, "tcl", "tk8.6")
+if os.path.exists(tcl_path) and os.path.exists(tk_path):
+    os.environ["TCL_LIBRARY"] = tcl_path
+    os.environ["TK_LIBRARY"] = tk_path
+else:
+    # Fallback: update these absolute paths to where Tcl/Tk is installed on your system
+    os.environ["TCL_LIBRARY"] = r"C:\Users\Dell\AppData\Local\Programs\Python\Python313\tcl\tcl8.6"
+    os.environ["TK_LIBRARY"] = r"C:\Users\Dell\AppData\Local\Programs\Python\Python313\tcl\tk8.6"
 
 import tkinter as tk
 from tkinter import messagebox
@@ -22,21 +33,13 @@ class MoveAnalyzer:
     def load_history(self):
         try:
             with open(self.log_file, 'r') as f:
-                logs = json.load(f)
-                for game in logs:
-                    board_size = len(game["board_state"])
-                    if board_size != self.board_size and self.board_size is not None:
-                        continue
-                    self.board_size = board_size
-                    for move in game["analyzed_moves"]:
-                        position = move["position"]
-                        self.move_history[position].append({
-                            "turn": game["turn"],
-                            "score": move.get("score", 0),
-                            "future_moves": move.get("future_moves", 0)
-                        })
+                return json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
-            pass
+            # Initialize empty logs file
+            empty_logs = []
+            with open(self.log_file, 'w') as f:
+                json.dump(empty_logs, f)
+            return empty_logs
 
     def analyze_position(self, position, turn):
         if position not in self.move_history:
@@ -61,6 +64,49 @@ class MoveAnalyzer:
 class NumberPuzzleGUI:
     def __init__(self):
         self.size = 10  # Default size
+        self.board_sizes = {"Small (5x5)": 5, "Standard (10x10)": 10}  # Added board sizes
+        
+        # Define themes
+        self.themes = {
+            "white": {
+                "bg": "#FFFFFF",
+                "fg": "#000000",
+                "button_bg": "#F0F0F0",
+                "button_fg": "#000000",
+                "button_active_bg": "#E0E0E0"
+            },
+            "dark": {
+                "bg": "#2D2D2D",
+                "fg": "#FFFFFF",
+                "button_bg": "#404040",
+                "button_fg": "#FFFFFF",
+                "button_active_bg": "#505050"
+            }
+        }
+        self.current_theme = "white"
+        
+        self.window = tk.Tk()
+        self.window.title("Number Puzzle 10x10")
+        # Bind keyboard events:
+        self.bind_keys()
+        
+        # Make window resizable
+        self.window.resizable(True, True)
+        
+        # Set minimum window size
+        self.window.minsize(400, 450)
+        
+        # Define font for numbers
+        self.number_font = tkFont.Font(size=10, weight="bold")
+
+        # Configure grid weights for main window
+        self.window.grid_columnconfigure(0, weight=1)
+        self.window.grid_rowconfigure(0, weight=1)
+        
+        # Main Frame
+        self.main_frame = tk.Frame(self.window)
+        self.main_frame.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
+        
         self.board = []
         self.current_number = 1
         self.game_over = False
@@ -72,18 +118,6 @@ class NumberPuzzleGUI:
         self.scores_file = "scores.json"
         self.top_scores = self.load_scores()
 
-        self.window = tk.Tk()
-        self.window.title("Number Puzzle 10x10")
-        
-        # Make window resizable
-        self.window.resizable(True, True)
-        
-        # Set minimum window size
-        self.window.minsize(400, 450)
-        
-        # Configure grid weights for main window
-        self.window.grid_columnconfigure(0, weight=1)
-        self.window.grid_rowconfigure(0, weight=1)
         
         # Main Frame
         self.main_frame = tk.Frame(self.window)
@@ -120,9 +154,9 @@ class NumberPuzzleGUI:
         self.btn_theme = tk.Button(self.main_frame, text="Dark Theme", command=self.switch_theme)
         self.btn_theme.pack(pady=10)
 
-        # Board Frame
+        # Board Frame: use pack instead of grid
         self.board_frame = tk.Frame(self.main_frame)
-        self.board_frame.grid(row=1, column=0, sticky='nsew')
+        self.board_frame.pack(expand=True, fill="both", padx=10, pady=10)
         
         # Configure grid weights for board frame
         for i in range(self.size):
@@ -138,9 +172,12 @@ class NumberPuzzleGUI:
         self.btn_auto = tk.Button(self.main_frame, text="Auto Play", command=self.toggle_auto_play)
         self.btn_auto.pack(pady=5)
 
-        # Score Sidebar
+        # Instead of pack(), use grid for score sidebar:
         self.score_frame = tk.Frame(self.window, width=250)
-        self.score_frame.pack(side=tk.RIGHT, fill=tk.Y)
+        self.score_frame.grid(row=0, column=1, sticky="ns")
+        # Configure column weights for main window to avoid conflicts
+        self.window.grid_columnconfigure(0, weight=1)
+        self.window.grid_columnconfigure(1, weight=0)
 
         # Score Lists Frame
         self.score_lists_frame = tk.Frame(self.score_frame)
@@ -170,6 +207,29 @@ class NumberPuzzleGUI:
         # Add Strategy Display
         self.strategy_label = tk.Label(self.main_frame, text="Strategy Tips:", wraplength=200, justify=tk.LEFT)
         self.strategy_label.pack(pady=5)
+
+    def bind_keys(self):
+        self.window.bind("<KeyPress>", self.handle_keypress)
+
+    def handle_keypress(self, event):
+        # Map arrow keys to moves
+        if event.keysym == "Up":
+            self.move_by_key(-3, 0)
+        elif event.keysym == "Down":
+            self.move_by_key(3, 0)
+        elif event.keysym == "Left":
+            self.move_by_key(0, -3)
+        elif event.keysym == "Right":
+            self.move_by_key(0, 3)
+        # Map Q, W, A, S for diagonal moves
+        elif event.char == "q":
+            self.move_by_key(-2, -2)
+        elif event.char == "w":
+            self.move_by_key(-2, 2)
+        elif event.char == "a":
+            self.move_by_key(2, -2)
+        elif event.char == "s":
+            self.move_by_key(2, 2)
 
     def set_board_size(self, option):
         if option == "Small (5x5)":
@@ -206,16 +266,20 @@ class NumberPuzzleGUI:
         try:
             with open(self.scores_file, "r") as f:
                 scores = json.load(f)
-                # Ensure that the scores dictionary has keys for both "10x10" and "5x5"
-                if not isinstance(scores, dict):
-                    scores = {}
-                if "10x10" not in scores:
-                    scores["10x10"] = []
-                if "5x5" not in scores:
-                    scores["5x5"] = []
-                return scores
-        except FileNotFoundError:
-            return {"10x10": [], "5x5": []}
+        except (FileNotFoundError, json.JSONDecodeError):
+            scores = {}
+        
+        # Ensure both board size categories exist
+        if "10x10" not in scores:
+            scores["10x10"] = []
+        if "5x5" not in scores:
+            scores["5x5"] = []
+        
+        # Save initialized structure
+        with open(self.scores_file, "w") as f:
+            json.dump(scores, f)
+            
+        return scores
 
     def save_scores(self):
         with open(self.scores_file, "w") as f:
