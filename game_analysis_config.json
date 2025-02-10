@@ -1,0 +1,15 @@
+{
+    "analysis_settings": {
+        "history_weight": 0.4,
+        "future_moves_weight": 0.3,
+        "board_coverage_weight": 0.2,
+        "corner_penalty_weight": 0.1,
+        "min_sample_size": 5,
+        "success_threshold": 0.6
+    },
+    "visualization": {
+        "best_move_color": "#00FF00",
+        "good_move_color": "#90EE90",
+        "valid_move_color": "#FFA500"
+    }
+}
