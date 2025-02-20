@@ -1,3 +1,18 @@
+import os
+import sys
+
+# Try to find Python's TCL/TK libraries
+python_path = os.path.dirname(sys.executable)
+tcl_path = os.path.join(python_path, "tcl", "tcl8.6")
+tk_path = os.path.join(python_path, "tcl", "tk8.6")
+if os.path.exists(tcl_path) and os.path.exists(tk_path):
+    os.environ["TCL_LIBRARY"] = tcl_path
+    os.environ["TK_LIBRARY"] = tk_path
+else:
+    # Fallback: update these absolute paths to where Tcl/Tk is installed on your system
+    os.environ["TCL_LIBRARY"] = r"C:\Users\Dell\AppData\Local\Programs\Python\Python313\tcl\tcl8.6"
+    os.environ["TK_LIBRARY"] = r"C:\Users\Dell\AppData\Local\Programs\Python\Python313\tcl\tk8.6"
+
 import tkinter as tk
 from tkinter import messagebox
 import time
@@ -5,10 +20,103 @@ import json
 import math
 import tkinter.font as tkFont
 from tkinter import simpledialog  # Correct import for simpledialog
+from collections import defaultdict
+import statistics
+import pygame  # Added for simple music playback
+
+class MoveAnalyzer:
+    def __init__(self):
+        self.move_history = defaultdict(list)
+        self.board_size = None
+        self.log_file = "autoplay_logs.json"
+        self.load_history()
+
+    def load_history(self):
+        try:
+            with open(self.log_file, 'r') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            # Initialize empty logs file
+            empty_logs = []
+            with open(self.log_file, 'w') as f:
+                json.dump(empty_logs, f)
+            return empty_logs
+
+    def analyze_position(self, position, turn):
+        if position not in self.move_history:
+            return None
+        
+        relevant_moves = [m for m in self.move_history[position] if abs(m["turn"] - turn) <= 5]
+        if not relevant_moves:
+            return None
+
+        avg_score = statistics.mean(m["score"] for m in relevant_moves if "score" in m)
+        avg_future_moves = statistics.mean(m["future_moves"] for m in relevant_moves if "future_moves" in m)
+        success_rate = len([m for m in relevant_moves if m.get("score", 0) > 0]) / len(relevant_moves)
+
+        return {
+            "position": position,
+            "avg_score": avg_score,
+            "avg_future_moves": avg_future_moves,
+            "success_rate": success_rate,
+            "sample_size": len(relevant_moves)
+        }
 
 class NumberPuzzleGUI:
     def __init__(self):
         self.size = 10  # Default size
+        self.board_sizes = {"Small (5x5)": 5, "Standard (10x10)": 10}  # Added board sizes
+        
+        # Define themes
+        self.themes = {
+            "white": {
+                "bg": "#FFFFFF",
+                "fg": "#000000",
+                "button_bg": "#F0F0F0",
+                "button_fg": "#000000",
+                "button_active_bg": "#E0E0E0"
+            },
+            "dark": {
+                "bg": "#2D2D2D",
+                "fg": "#FFFFFF",
+                "button_bg": "#404040",
+                "button_fg": "#FFFFFF",
+                "button_active_bg": "#505050"
+            }
+        }
+        self.current_theme = "white"
+        
+        self.window = tk.Tk()
+        self.window.title("Number Puzzle 10x10")
+        # Bind keyboard events:
+        self.bind_keys()
+        
+        # Initialize and play background music
+        try:
+            pygame.mixer.init()
+            music_file = os.path.join(os.path.dirname(__file__), "background.mp3")
+            pygame.mixer.music.load(music_file)
+            pygame.mixer.music.play(-1)  # Loop indefinitely
+        except Exception as e:
+            print("Error playing music:", e)
+        
+        # Make window resizable
+        self.window.resizable(True, True)
+        
+        # Set minimum window size
+        self.window.minsize(400, 450)
+        
+        # Define font for numbers
+        self.number_font = tkFont.Font(size=10, weight="bold")
+
+        # Configure grid weights for main window
+        self.window.grid_columnconfigure(0, weight=1)
+        self.window.grid_rowconfigure(0, weight=1)
+        
+        # Main Frame
+        self.main_frame = tk.Frame(self.window)
+        self.main_frame.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
+        
         self.board = []
         self.current_number = 1
         self.game_over = False
@@ -20,18 +128,6 @@ class NumberPuzzleGUI:
         self.scores_file = "scores.json"
         self.top_scores = self.load_scores()
 
-        self.window = tk.Tk()
-        self.window.title("Number Puzzle 10x10")
-        
-        # Make window resizable
-        self.window.resizable(True, True)
-        
-        # Set minimum window size
-        self.window.minsize(400, 450)
-        
-        # Configure grid weights for main window
-        self.window.grid_columnconfigure(0, weight=1)
-        self.window.grid_rowconfigure(0, weight=1)
         
         # Main Frame
         self.main_frame = tk.Frame(self.window)
@@ -92,7 +188,7 @@ class NumberPuzzleGUI:
         self.btn_theme = tk.Button(self.main_frame, text="Dark Theme", command=self.switch_theme)
         self.btn_theme.grid(row=6, column=0, pady=10, sticky='ew')
 
-        # Board Frame
+        # Board Frame: use pack instead of grid
         self.board_frame = tk.Frame(self.main_frame)
         self.board_frame.grid(row=7, column=0, sticky='nsew')
         
@@ -110,7 +206,7 @@ class NumberPuzzleGUI:
         self.btn_auto = tk.Button(self.main_frame, text="Auto Play", command=self.toggle_auto_play)
         self.btn_auto.grid(row=9, column=0, pady=5, sticky='ew')
 
-        # Score Sidebar
+        # Instead of pack(), use grid for score sidebar:
         self.score_frame = tk.Frame(self.window, width=250)
         self.score_frame.grid(row=0, column=1, sticky='ns')
 
@@ -135,6 +231,36 @@ class NumberPuzzleGUI:
         self.update_score_list()
         self.create_board() # Generate initial board (10x10 by default)
         self.apply_theme()
+
+        self.move_analyzer = MoveAnalyzer()
+        self.game_history = []
+        
+        # Add Strategy Display
+        self.strategy_label = tk.Label(self.main_frame, text="Strategy Tips:", wraplength=200, justify=tk.LEFT)
+        self.strategy_label.pack(pady=5)
+
+    def bind_keys(self):
+        self.window.bind("<KeyPress>", self.handle_keypress)
+
+    def handle_keypress(self, event):
+        # Map arrow keys to moves
+        if event.keysym == "Up":
+            self.move_by_key(-3, 0)
+        elif event.keysym == "Down":
+            self.move_by_key(3, 0)
+        elif event.keysym == "Left":
+            self.move_by_key(0, -3)
+        elif event.keysym == "Right":
+            self.move_by_key(0, 3)
+        # Map Q, W, A, S for diagonal moves
+        elif event.char == "q":
+            self.move_by_key(-2, -2)
+        elif event.char == "w":
+            self.move_by_key(-2, 2)
+        elif event.char == "a":
+            self.move_by_key(2, -2)
+        elif event.char == "s":
+            self.move_by_key(2, 2)
 
     def set_board_size(self, option):
         if option == "Small (5x5)":
@@ -165,21 +291,26 @@ class NumberPuzzleGUI:
               button_row.append(button)
            self.buttons.append(button_row)
         self.apply_theme()
+        self.label_info.config(text="Game will start with '1' in top-left corner")
     
     def load_scores(self):
         try:
             with open(self.scores_file, "r") as f:
                 scores = json.load(f)
-                # Ensure that the scores dictionary has keys for both "10x10" and "5x5"
-                if not isinstance(scores, dict):
-                    scores = {}
-                if "10x10" not in scores:
-                    scores["10x10"] = []
-                if "5x5" not in scores:
-                    scores["5x5"] = []
-                return scores
-        except FileNotFoundError:
-            return {"10x10": [], "5x5": []}
+        except (FileNotFoundError, json.JSONDecodeError):
+            scores = {}
+        
+        # Ensure both board size categories exist
+        if "10x10" not in scores:
+            scores["10x10"] = []
+        if "5x5" not in scores:
+            scores["5x5"] = []
+        
+        # Save initialized structure
+        with open(self.scores_file, "w") as f:
+            json.dump(scores, f)
+            
+        return scores
 
     def save_scores(self):
         with open(self.scores_file, "w") as f:
@@ -227,6 +358,16 @@ class NumberPuzzleGUI:
     def make_move(self, row, col):
         if self.game_over:
             return
+
+        # Log the state before the move
+        current_state = {
+            "turn": self.current_number,
+            "board": [row[:] for row in self.board],
+            "position": (row, col),
+            "timestamp": time.time()
+        }
+
+        # Execute the move with existing logic
         if self.current_number == 1:
             self.start_time = time.time()
             self.board[row][col] = self.current_number
@@ -242,6 +383,8 @@ class NumberPuzzleGUI:
             self.move_counter.config(text=f"Moves: {len(self.moves)}")
             self.highlight_valid_moves()
             self.update_timer()
+            self.game_history.append(current_state)
+            self.analyze_and_update_strategy()
             return
 
         if not self.is_valid_move(row, col):
@@ -266,6 +409,8 @@ class NumberPuzzleGUI:
         self.move_counter.config(text=f"Moves: {len(self.moves)}")
         self.highlight_valid_moves()
         self.update_timer()
+        self.game_history.append(current_state)
+        self.analyze_and_update_strategy()
 
         if not self.get_possible_moves():
             self.end_game()
@@ -274,21 +419,22 @@ class NumberPuzzleGUI:
         self.board = [[0 for _ in range(self.size)] for _ in range(self.size)]
         self.current_number = 1
         self.game_over = False
-        self.current_position = None
         self.moves = []
         self.start_time = 0
         self.elapsed_time = 0
         self.auto_playing = False
         self.btn_auto.config(text="Auto Play")
 
+        # Reset all buttons
         for row in range(self.size):
             for col in range(self.size):
                 self.buttons[row][col].config(text=" ", bg=self.themes[self.current_theme]["button_bg"], fg=self.themes[self.current_theme]["button_fg"])
+        
         self.btn_undo.config(state=tk.DISABLED)
-
-        self.label_info.config(text="Click to start placing '1'")
         self.label_time.config(text="Time: 0 s")
 
+        # Automatically place 1 in the top-left corner (0,0)
+        self.make_move(0, 0)
 
     def update_timer(self):
         if not self.game_over and self.start_time != 0:
@@ -330,6 +476,30 @@ class NumberPuzzleGUI:
         self.auto_playing = False
         self.elapsed_time = int(time.time() - self.start_time)
         score = self.current_number - 1
+        
+        # Save game history - updated logging to write a valid JSON list
+        game_summary = {
+            "size": self.size,
+            "score": score,
+            "time": self.elapsed_time,
+            "moves": [(state["position"], state["turn"]) for state in self.game_history]
+        }
+        
+        try:
+            # Read existing logs
+            if os.path.exists("game_history.json"):
+                with open("game_history.json", "r") as f:
+                    existing_logs = json.load(f)
+            else:
+                existing_logs = []
+            # Append new game summary
+            existing_logs.append(game_summary)
+            # Write back the updated logs
+            with open("game_history.json", "w") as f:
+                json.dump(existing_logs, f, indent=2)
+        except Exception as e:
+            print(f"Error saving game history: {e}")
+        
         self.label_time.config(text=f"Time: {self.elapsed_time} s")
         self.window.after(0, lambda: self.check_high_score(score, self.elapsed_time))
         self.btn_auto.config(text="Auto Play")
@@ -353,49 +523,33 @@ class NumberPuzzleGUI:
             self.end_game()
             return
 
-        # Enhanced move analysis
-        move_analysis = []
+        # Enhanced move analysis using historical data
+        move_analyses = []
         for move in possible_moves:
-            row, col = move
-            analysis = {
-                "position": (row, col),
-                "center_distance": abs(row - self.size//2) + abs(col - self.size//2),
+            historical_analysis = self.move_analyzer.analyze_position(move, self.current_number)
+            current_analysis = {
+                "position": move,
                 "future_moves": self.count_future_moves(move),
                 "board_coverage": self.calculate_board_coverage(move),
-                "corner_proximity": self.is_corner_move(row, col)
+                "corner_proximity": self.is_corner_move(*move)
             }
-            move_analysis.append(analysis)
-
-        # Choose best move using weighted scoring
-        best_move = None
-        best_score = float('-inf')
-        
-        for analysis in move_analysis:
-            move_score = (
-                analysis["future_moves"] * 10 +          # Weight future moves heavily
-                (10 - analysis["center_distance"]) * 2 + # Prefer central positions
-                analysis["board_coverage"] * 5 -         # Consider board coverage
-                analysis["corner_proximity"] * 3         # Slightly avoid corners
+            
+            # Combine historical and current analysis
+            score = (
+                (historical_analysis["success_rate"] * 20 if historical_analysis else 0) +
+                current_analysis["future_moves"] * 10 +
+                (10 - current_analysis["corner_proximity"]) * 2 +
+                current_analysis["board_coverage"] * 5
             )
             
-            if move_score > best_score:
-                best_score = move_score
-                best_move = analysis["position"]
+            move_analyses.append({**current_analysis, "score": score})
 
-        if best_move:
-            # Log the move decision
-            self.log_move_analysis({
-                "turn": self.current_number,
-                "chosen_move": best_move,
-                "analyzed_moves": move_analysis,
-                "best_score": best_score,
-                "board_state": [row[:] for row in self.board],
-                "timestamp": time.time()
-            })
-            
-            self.make_move(*best_move)
-            if self.auto_playing:
-                self.window.after(500, self.make_auto_move)
+        # Choose best move
+        best_move = max(move_analyses, key=lambda x: x["score"])
+        self.make_move(*best_move["position"])
+        
+        if self.auto_playing:
+            self.window.after(500, self.make_auto_move)
 
     def calculate_board_coverage(self, move):
         """Calculate how well a move contributes to board coverage"""
@@ -491,7 +645,7 @@ class NumberPuzzleGUI:
         # Diagonal moves
         moves_diagonal = [(-2, -2), (-2, 2), (2, -2), (2, 2)]
         for dr, dc in moves_diagonal:
-            next_row, next_col = row + dr, col + dc
+            next_row, next_col = row + dr, dc + col
             if self.is_valid_position(next_row, next_col) and temp_board[next_row][next_col] == 0:
                 future_moves.append((next_row, next_col))
         
@@ -563,12 +717,68 @@ class NumberPuzzleGUI:
     def highlight_valid_moves(self):
         valid_moves = self.get_possible_moves()
         for row in range(self.size):
-            for col in range(self.size):
-                if (row, col) in valid_moves:
-                    self.buttons[row][col].config(bg="#90EE90")
-                else:
-                    self.buttons[row][col].config(bg=self.themes[self.current_theme]["button_bg"])
+         for col in range(self.size):
+          if (row, col) in valid_moves:
+           future_moves_count = self.count_future_moves((row, col))
+           if not hasattr(self, 'min_future_moves_valid_moves'):
+            self.min_future_moves_valid_moves = {}
+           self.min_future_moves_valid_moves[(row, col)] = future_moves_count
+
+        if valid_moves:
+         min_future_moves = min(self.min_future_moves_valid_moves.values())
+         for row in range(self.size):
+          for col in range(self.size):
+           if (row, col) in valid_moves and self.min_future_moves_valid_moves[(row, col)] == min_future_moves:
+            self.buttons[row][col].config(bg="#FFA500") # Highlight color for fewest options
+           elif (row, col) in valid_moves:
+            self.buttons[row][col].config(bg="#90EE90") # Original valid move color
+           else:
+            self.buttons[row][col].config(bg=self.themes[self.current_theme]["button_bg"])
         self.btn_undo.config(state=tk.NORMAL if len(self.moves) > 1 else tk.DISABLED)
+
+    def highlight_analyzed_moves(self, analyzed_moves, best_move):
+        if not analyzed_moves:
+            return self.highlight_valid_moves()
+        valid_moves = self.get_possible_moves()
+        for row in range(self.size):
+            for col in range(self.size):
+                if (row, col) not in valid_moves:
+                    self.buttons[row][col].config(bg=self.themes[self.current_theme]["button_bg"])
+                    continue
+                move_analysis = next((m for m in analyzed_moves if m["position"] == (row, col)), None)
+                if move_analysis:
+                    if move_analysis["position"] == best_move["position"]:
+                        self.buttons[row][col].config(bg="#0000FF")  # Bright blue for best move
+                    elif move_analysis["success_rate"] > 0.6:
+                        self.buttons[row][col].config(bg="#90EE90")  # Light green for good moves
+                    else:
+                        self.buttons[row][col].config(bg="#FFA500")  # Orange for other moves
+                else:
+                    self.buttons[row][col].config(bg="#FFA500")
+
+    def analyze_and_update_strategy(self):
+        if len(self.game_history) < 2:
+            return
+
+        possible_moves = self.get_possible_moves()
+        move_analyses = []
+        for move in possible_moves:
+            analysis = self.move_analyzer.analyze_position(move, self.current_number)
+            if analysis:
+                move_analyses.append(analysis)
+        if move_analyses:
+            # Compute best move using weighted criteria:
+            best_move = max(move_analyses, key=lambda m: m["success_rate"] * 100 + m["avg_future_moves"])
+            # For strategy tips, sort by success rate and average future moves
+            move_analyses.sort(key=lambda x: (x["success_rate"], x["avg_future_moves"]), reverse=True)
+            best_moves = move_analyses[:3]
+            tips = ["Strategy Tips:"]
+            for i, move in enumerate(best_moves, 1):
+                row, col = move["position"]
+                tips.append(f"{i}. Consider ({row},{col}): {move['success_rate']:.2%} success rate")
+                tips.append(f"   Avg future moves: {move['avg_future_moves']:.1f}")
+            self.strategy_label.config(text="\n".join(tips))
+            self.highlight_analyzed_moves(move_analyses, best_move)
 
     def undo_move(self):
         if len(self.moves) > 1:
