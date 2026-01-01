@@ -136,37 +136,61 @@ class NumberPuzzleGUI:
         # Configure grid weights for main frame
         self.main_frame.grid_columnconfigure(0, weight=1)
         self.main_frame.grid_rowconfigure(0, weight=1)
+
+        self.number_font = tkFont.Font(family="Helvetica", size=12, weight="bold")
+
+        self.current_theme = "white"
+        self.themes = {
+            "white": {
+                "bg": "white",
+                "fg": "black",
+                "button_bg": "#f0f0f0",
+                "button_fg": "black",
+                "button_active_bg": "#e0e0e0"
+            },
+            "dark": {
+                "bg": "#2e2e2e",
+                "fg": "#f0f0f0",
+                "button_bg": "#424242",
+                "button_fg": "#f0f0f0",
+                "button_active_bg": "#5c5c5c"
+            }
+        }
+        
+        self.board_sizes = {
+            "Small (5x5)": 5,
+            "Standard (10x10)": 10
+        }
         
         # Option Menu for Board Size
         self.size_var = tk.StringVar(value="Standard (10x10)")
         size_options = list(self.board_sizes.keys())
-        size_menu = tk.OptionMenu(self.main_frame, self.size_var, *size_options, command=self.set_board_size)
-        size_menu.pack(pady=10)
-
+        self.size_menu = tk.OptionMenu(self.main_frame, self.size_var, *size_options, command=self.set_board_size)
+        self.size_menu.grid(row=1, column=0, pady=10, sticky='ew')
 
         # Info Label
-        self.label_info = tk.Label(self.main_frame, text="Game starts with '1' in top-left corner")
-        self.label_info.pack(pady=10)
+        self.label_info = tk.Label(self.main_frame, text="Choose board size to start")
+        self.label_info.grid(row=2, column=0, pady=10, sticky='ew')
 
         # Time Label
         self.label_time = tk.Label(self.main_frame, text="Time: 0 s")
-        self.label_time.pack(pady=5)
+        self.label_time.grid(row=3, column=0, pady=5, sticky='ew')
 
         # Move Counter
         self.move_counter = tk.Label(self.main_frame, text="Moves: 0")
-        self.move_counter.pack(pady=5)
+        self.move_counter.grid(row=4, column=0, pady=5, sticky='ew')
 
         # New Game Button
         self.btn_new_game = tk.Button(self.main_frame, text="New Game", command=self.start_new_game)
-        self.btn_new_game.pack(pady=5)
+        self.btn_new_game.grid(row=5, column=0, pady=5, sticky='ew')
 
         # Theme Switch Button
         self.btn_theme = tk.Button(self.main_frame, text="Dark Theme", command=self.switch_theme)
-        self.btn_theme.pack(pady=10)
+        self.btn_theme.grid(row=6, column=0, pady=10, sticky='ew')
 
         # Board Frame: use pack instead of grid
         self.board_frame = tk.Frame(self.main_frame)
-        self.board_frame.pack(expand=True, fill="both", padx=10, pady=10)
+        self.board_frame.grid(row=7, column=0, sticky='nsew')
         
         # Configure grid weights for board frame
         for i in range(self.size):
@@ -175,37 +199,34 @@ class NumberPuzzleGUI:
 
         # Undo Button
         self.btn_undo = tk.Button(self.main_frame, text="Undo", command=self.undo_move, state=tk.DISABLED)
-        self.btn_undo.pack(pady=5)
+        self.btn_undo.grid(row=8, column=0, pady=5, sticky='ew')
 
         # Auto Play Button
         self.auto_playing = False
         self.btn_auto = tk.Button(self.main_frame, text="Auto Play", command=self.toggle_auto_play)
-        self.btn_auto.pack(pady=5)
+        self.btn_auto.grid(row=9, column=0, pady=5, sticky='ew')
 
         # Instead of pack(), use grid for score sidebar:
         self.score_frame = tk.Frame(self.window, width=250)
-        self.score_frame.grid(row=0, column=1, sticky="ns")
-        # Configure column weights for main window to avoid conflicts
-        self.window.grid_columnconfigure(0, weight=1)
-        self.window.grid_columnconfigure(1, weight=0)
+        self.score_frame.grid(row=0, column=1, sticky='ns')
 
         # Score Lists Frame
         self.score_lists_frame = tk.Frame(self.score_frame)
-        self.score_lists_frame.pack(fill=tk.BOTH, expand=True)
+        self.score_lists_frame.grid(row=0, column=0, sticky='nsew')
 
         # Top 10 10x10 Label
-        tk.Label(self.score_lists_frame, text="Top 10 10x10 Scores", font="Helvetica 12 bold").pack(pady=5)
+        tk.Label(self.score_lists_frame, text="Top 10 10x10 Scores", font="Helvetica 12 bold").grid(row=0, column=0, pady=5)
 
         # Listbox for 10x10 scores
         self.score_listbox_10x10 = tk.Listbox(self.score_lists_frame, width=40, height=10)
-        self.score_listbox_10x10.pack(padx=15, pady=10, fill=tk.BOTH)
+        self.score_listbox_10x10.grid(row=1, column=0, padx=15, pady=10, sticky='nsew')
 
         # Top 10 5x5 Label
-        tk.Label(self.score_lists_frame, text="Top 10 5x5 Scores", font="Helvetica 12 bold").pack(pady=10)
+        tk.Label(self.score_lists_frame, text="Top 10 5x5 Scores", font="Helvetica 12 bold").grid(row=2, column=0, pady=10)
 
         # Listbox for 5x5 scores
         self.score_listbox_5x5 = tk.Listbox(self.score_lists_frame, width=40, height=10)
-        self.score_listbox_5x5.pack(padx=15, pady=10, fill=tk.BOTH)
+        self.score_listbox_5x5.grid(row=3, column=0, padx=15, pady=10, sticky='nsew')
         
         self.update_score_list()
         self.create_board() # Generate initial board (10x10 by default)
@@ -535,7 +556,7 @@ class NumberPuzzleGUI:
         row, col = move
         coverage = 0
         for r in range(max(0, row-2), min(self.size, row+3)):
-            for c in range(max(0, col-2), min(self.size, col+3)):
+            for c in range(max(0, col-2), min(self.size, row+3)):
                 if self.board[r][c] == 0:
                     coverage += 1
         return coverage / (self.size * self.size)
