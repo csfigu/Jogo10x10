@@ -67,38 +67,83 @@ class NumberPuzzleGUI:
         self.size = 10  # Default size
         self.board_sizes = {"Small (5x5)": 5, "Standard (10x10)": 10}  # Added board sizes
         
-        # Define themes
+        # Define themes with enhanced styling
         self.themes = {
             "white": {
                 "bg": "#FFFFFF",
                 "fg": "#000000",
                 "button_bg": "#F0F0F0",
                 "button_fg": "#000000",
-                "button_active_bg": "#E0E0E0"
+                "button_active_bg": "#E0E0E0",
+                "button_hover_bg": "#E8E8E8",
+                "button_border": "#CCCCCC",
+                "button_shadow": "#999999",
+                "path_color": "#4A90E2"
             },
             "dark": {
                 "bg": "#2D2D2D",
                 "fg": "#FFFFFF",
                 "button_bg": "#404040",
                 "button_fg": "#FFFFFF",
-                "button_active_bg": "#505050"
+                "button_active_bg": "#505050",
+                "button_hover_bg": "#4A4A4A",
+                "button_border": "#555555",
+                "button_shadow": "#333333",
+                "path_color": "#5DADE2"
+            },
+            "pastel": {
+                "bg": "#FDF5E6",
+                "fg": "#5D4037",
+                "button_bg": "#FFE0B2",
+                "button_fg": "#5D4037",
+                "button_active_bg": "#FFCC80",
+                "button_hover_bg": "#FFB74D",
+                "button_border": "#FFA726",
+                "button_shadow": "#FB8C00",
+                "path_color": "#81C784"
+            },
+            "neon": {
+                "bg": "#0D0D0D",
+                "fg": "#00FF00",
+                "button_bg": "#1A1A1A",
+                "button_fg": "#00FF00",
+                "button_active_bg": "#00FF00",
+                "button_hover_bg": "#33FF33",
+                "button_border": "#00CC00",
+                "button_shadow": "#009900",
+                "path_color": "#FF00FF"
+            },
+            "retro": {
+                "bg": "#C0C0C0",
+                "fg": "#000000",
+                "button_bg": "#808080",
+                "button_fg": "#FFFFFF",
+                "button_active_bg": "#A0A0A0",
+                "button_hover_bg": "#909090",
+                "button_border": "#606060",
+                "button_shadow": "#404040",
+                "path_color": "#800080"
             }
         }
         self.current_theme = "white"
+        self.animation_speed = 20  # milliseconds between animation frames
+        self.animation_steps = 10  # number of steps for fade animation
+        
+        # Sound effects
+        self.sounds_enabled = True
+        self.sound_effects = {}
+        self.init_sounds()
         
         self.window = tk.Tk()
         self.window.title("Number Puzzle 10x10")
         # Bind keyboard events:
         self.bind_keys()
         
-        # Initialize and play background music
+        # Initialize pygame mixer for sound effects only
         try:
             pygame.mixer.init()
-            music_file = os.path.join(os.path.dirname(__file__), "background.mp3")
-            pygame.mixer.music.load(music_file)
-            pygame.mixer.music.play(-1)  # Loop indefinitely
         except Exception as e:
-            print("Error playing music:", e)
+            print("Error initializing pygame mixer:", e)
         
         # Make window resizable
         self.window.resizable(True, True)
@@ -139,24 +184,6 @@ class NumberPuzzleGUI:
 
         self.number_font = tkFont.Font(family="Helvetica", size=12, weight="bold")
 
-        self.current_theme = "white"
-        self.themes = {
-            "white": {
-                "bg": "white",
-                "fg": "black",
-                "button_bg": "#f0f0f0",
-                "button_fg": "black",
-                "button_active_bg": "#e0e0e0"
-            },
-            "dark": {
-                "bg": "#2e2e2e",
-                "fg": "#f0f0f0",
-                "button_bg": "#424242",
-                "button_fg": "#f0f0f0",
-                "button_active_bg": "#5c5c5c"
-            }
-        }
-        
         self.board_sizes = {
             "Small (5x5)": 5,
             "Standard (10x10)": 10
@@ -229,19 +256,298 @@ class NumberPuzzleGUI:
         self.score_listbox_5x5.grid(row=3, column=0, padx=15, pady=10, sticky='nsew')
         
         self.update_score_list()
-        self.create_board() # Generate initial board (10x10 by default)
-        self.apply_theme()
-
+        
         self.move_analyzer = MoveAnalyzer()
         self.game_history = []
         
+        # Add Progress Bar (must be created before create_board which calls apply_theme)
+        self.progress_frame = tk.Frame(self.main_frame)
+        self.progress_frame.grid(row=10, column=0, pady=5, sticky='ew')
+        tk.Label(self.progress_frame, text="Progress:").pack(side=tk.LEFT)
+        self.progress_bar = tk.Canvas(self.progress_frame, width=200, height=20, bg=self.themes[self.current_theme]["bg"])
+        self.progress_bar.pack(side=tk.LEFT, padx=10)
+        
+        # Add Game Over Label (hidden by default)
+        self.game_over_label = tk.Label(self.board_frame, text="GAME OVER",
+                                        font=tkFont.Font(family="Helvetica", size=36, weight="bold"),
+                                        fg="#FF0000", bg=self.themes[self.current_theme]["bg"])
+        
+        # Add Move History Panel
+        self.history_frame = tk.Frame(self.score_frame)
+        self.history_frame.grid(row=1, column=0, sticky='nsew', padx=10, pady=5)
+        tk.Label(self.history_frame, text="Move History", font="Helvetica 12 bold").pack(pady=5)
+        self.history_listbox = tk.Listbox(self.history_frame, width=40, height=8)
+        self.history_listbox.pack(pady=5)
+        
+        # Add Statistics Dashboard
+        self.stats_frame = tk.Frame(self.score_frame)
+        self.stats_frame.grid(row=2, column=0, sticky='nsew', padx=10, pady=5)
+        tk.Label(self.stats_frame, text="Statistics", font="Helvetica 12 bold").pack(pady=5)
+        self.stats_label = tk.Label(self.stats_frame, text="Games Played: 0\nBest Score: 0\nAvg Score: 0", justify=tk.LEFT)
+        self.stats_label.pack(pady=5)
+        
         # Add Strategy Display
         self.strategy_label = tk.Label(self.main_frame, text="Strategy Tips:", wraplength=200, justify=tk.LEFT)
-        self.strategy_label.pack(pady=5)
+        self.strategy_label.grid(row=11, column=0, pady=5, sticky='ew')
+        
+        # Add Help Button
+        self.btn_help = tk.Button(self.main_frame, text="How to Play", command=self.show_help)
+        self.btn_help.grid(row=12, column=0, pady=5, sticky='ew')
+        
+        # Add Sound Toggle Button
+        self.btn_sound = tk.Button(self.main_frame, text="Sound: ON", command=self.toggle_sound)
+        self.btn_sound.grid(row=13, column=0, pady=5, sticky='ew')
+        
+        # Add Test End Game Button (for debugging)
+        self.btn_test_end = tk.Button(self.main_frame, text="Test End Game", command=self.test_end_game)
+        self.btn_test_end.grid(row=14, column=0, pady=5, sticky='ew')
+        
+        # Load statistics
+        self.load_statistics()
+        
+        self.create_board() # Generate initial board (10x10 by default)
 
     def bind_keys(self):
         self.window.bind("<KeyPress>", self.handle_keypress)
 
+    def init_sounds(self):
+        """Initialize sound effects using pygame"""
+        try:
+            # Create simple beep sounds using pygame
+            self.sounds = {
+                "move": None,
+                "invalid": None,
+                "win": None
+            }
+        except Exception as e:
+            print(f"Error initializing sounds: {e}")
+            self.sounds_enabled = False
+    
+    def play_sound(self, sound_type):
+        """Play a sound effect with pitch based on game progress"""
+        if not self.sounds_enabled:
+            return
+        try:
+            # Calculate pitch based on game progress
+            max_number = self.size * self.size
+            progress = (self.current_number - 1) / max_number if max_number > 0 else 0
+            
+            if sound_type == "move":
+                # Pitch increases as game progresses (from 440Hz to 880Hz)
+                base_freq = 440
+                pitch_multiplier = 1.0 + progress  # 1.0 to 2.0
+                frequency = int(base_freq * pitch_multiplier)
+                pygame.mixer.Sound(buffer=self.generate_beep(frequency, 0.1)).play()
+            elif sound_type == "invalid":
+                pygame.mixer.Sound(buffer=self.generate_beep(200, 0.2)).play()
+            elif sound_type == "win":
+                # Victory sound with ascending pitch
+                pygame.mixer.Sound(buffer=self.generate_beep(880, 0.3)).play()
+        except Exception as e:
+            print(f"Error playing sound: {e}")
+    
+    def generate_beep(self, frequency, duration):
+        """Generate a simple beep sound"""
+        import numpy as np
+        sample_rate = 44100
+        n_samples = int(sample_rate * duration)
+        t = np.linspace(0, duration, n_samples, False)
+        # Simple sine wave
+        wave = np.sin(2 * np.pi * frequency * t) * 0.3
+        # Convert to 16-bit signed integers
+        wave = (wave * 32767).astype(np.int16)
+        # Stereo
+        stereo = np.column_stack((wave, wave))
+        return stereo.tobytes()
+    
+    def load_statistics(self):
+        """Load game statistics"""
+        try:
+            with open("game_stats.json", "r") as f:
+                stats = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            stats = {
+                "games_played": 0,
+                "best_score": 0,
+                "total_score": 0
+            }
+            with open("game_stats.json", "w") as f:
+                json.dump(stats, f)
+        self.stats = stats
+        self.update_stats_display()
+    
+    def save_statistics(self, score):
+        """Save game statistics"""
+        self.stats["games_played"] += 1
+        if score > self.stats["best_score"]:
+            self.stats["best_score"] = score
+        self.stats["total_score"] += score
+        with open("game_stats.json", "w") as f:
+            json.dump(self.stats, f)
+        self.update_stats_display()
+    
+    def update_stats_display(self):
+        """Update statistics display"""
+        avg_score = self.stats["total_score"] / self.stats["games_played"] if self.stats["games_played"] > 0 else 0
+        self.stats_label.config(
+            text=f"Games Played: {self.stats['games_played']}\n"
+                 f"Best Score: {self.stats['best_score']}\n"
+                 f"Avg Score: {avg_score:.1f}"
+        )
+    
+    def update_progress_bar(self):
+        """Update progress bar"""
+        if self.size == 0:
+            return
+        progress = (self.current_number - 1) / (self.size * self.size)
+        self.progress_bar.delete("all")
+        theme = self.themes[self.current_theme]
+        # Draw progress bar
+        self.progress_bar.create_rectangle(
+            0, 0, 200 * progress, 20,
+            fill=theme["path_color"], outline=""
+        )
+        # Draw border
+        self.progress_bar.create_rectangle(
+            0, 0, 200, 20,
+            outline=theme["fg"], width=2
+        )
+        # Draw percentage text
+        self.progress_bar.create_text(
+            100, 10,
+            text=f"{int(progress * 100)}%",
+            fill=theme["fg"]
+        )
+    
+    def update_move_history(self):
+        """Update move history display"""
+        self.history_listbox.delete(0, tk.END)
+        for i, (row, col) in enumerate(self.moves[-10:], 1):  # Show last 10 moves
+            move_num = len(self.moves) - len(self.moves[-10:]) + i
+            self.history_listbox.insert(tk.END, f"{move_num}: ({row}, {col})")
+        self.history_listbox.see(tk.END)
+    
+    def draw_path_indicator(self):
+        """Draw lines connecting the sequence of moves"""
+        if len(self.moves) < 2:
+            return
+        
+        theme = self.themes[self.current_theme]
+        path_color = theme["path_color"]
+        
+        # Remove existing path canvas if any
+        if hasattr(self, 'path_canvas') and self.path_canvas:
+            self.path_canvas.destroy()
+        
+        # Create a single canvas for all path lines with the board frame's background color
+        # This makes it blend in with the background
+        self.path_canvas = tk.Canvas(self.board_frame, bg=theme["bg"], highlightthickness=0)
+        self.path_canvas.place(x=0, y=0, relwidth=1, relheight=1)
+        
+        # Draw lines between consecutive moves
+        for i in range(len(self.moves) - 1):
+            start_row, start_col = self.moves[i]
+            end_row, end_col = self.moves[i + 1]
+            
+            # Get button coordinates
+            start_btn = self.buttons[start_row][start_col]
+            end_btn = self.buttons[end_row][end_col]
+            
+            # Draw line
+            start_x = start_btn.winfo_x() + start_btn.winfo_width() / 2
+            start_y = start_btn.winfo_y() + start_btn.winfo_height() / 2
+            end_x = end_btn.winfo_x() + end_btn.winfo_width() / 2
+            end_y = end_btn.winfo_y() + end_btn.winfo_height() / 2
+            
+            self.path_canvas.create_line(start_x, start_y, end_x, end_y,
+                          fill=path_color, width=3, arrow=tk.LAST)
+        
+        # Ensure buttons are above the canvas
+        for row in self.buttons:
+            for button in row:
+                button.lift(self.path_canvas)
+    
+    def show_help(self):
+        """Show How to Play modal"""
+        help_window = tk.Toplevel(self.window)
+        help_window.title("How to Play")
+        help_window.geometry("600x500")
+        
+        theme = self.themes[self.current_theme]
+        help_window.config(bg=theme["bg"])
+        
+        # Create scrollable text
+        text_frame = tk.Frame(help_window)
+        text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        help_text = tk.Text(text_frame, wrap=tk.WORD, width=60, height=25,
+                          bg=theme["bg"], fg=theme["fg"])
+        help_text.pack(fill=tk.BOTH, expand=True)
+        
+        scrollbar = tk.Scrollbar(text_frame, command=help_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        help_text.config(yscrollcommand=scrollbar.set)
+        
+        # Help content
+        content = """
+HOW TO PLAY NUMBER PUZZLE
+
+OBJECTIVE:
+Place numbers from 1 to N (where N = board size × board size) on the board following specific movement rules.
+
+MOVEMENT RULES:
+• From position (r, c), you can move to:
+  - (r, c ± 3) - Move 3 cells horizontally
+  - (r ± 3, c) - Move 3 cells vertically
+  - (r ± 2, c ± 2) - Move 2 cells diagonally
+
+EXAMPLE:
+If you're at position (2, 2), you can move to:
+  - (2, 5) or (2, -1) - Horizontal moves
+  - (5, 2) or (-1, 2) - Vertical moves
+  - (4, 4), (4, 0), (0, 4), or (0, 0) - Diagonal moves
+
+GAMEPLAY:
+1. The game starts with '1' automatically placed at (0, 0)
+2. Click on a valid cell to place the next number
+3. Valid moves are highlighted in green
+4. Cells with fewer future moves are highlighted in orange
+5. The game ends when no valid moves remain
+
+CONTROLS:
+• Mouse: Click on cells to make moves
+• Arrow Keys: Move in cardinal directions (±3 cells)
+• Q, W, A, S: Move diagonally (±2 cells)
+• Undo: Revert the last move
+• Auto Play: Let the AI make moves
+
+FEATURES:
+• Progress bar shows completion percentage
+• Move history shows recent moves
+• Statistics track your performance
+• Strategy tips suggest optimal moves
+• Multiple themes available
+
+TIPS:
+• Try to maximize board coverage
+• Avoid getting trapped in corners
+• Plan ahead using strategy tips
+• Use undo to try different paths
+"""
+        
+        help_text.insert(tk.END, content)
+        help_text.config(state=tk.DISABLED)
+        
+        # Close button
+        close_btn = tk.Button(help_window, text="Close", command=help_window.destroy,
+                          bg=theme["button_bg"], fg=theme["button_fg"])
+        close_btn.pack(pady=10)
+    
+    def toggle_sound(self):
+        """Toggle sound effects"""
+        self.sounds_enabled = not self.sounds_enabled
+        self.btn_sound.config(text=f"Sound: {'ON' if self.sounds_enabled else 'OFF'}")
+    
     def handle_keypress(self, event):
         # Map arrow keys to moves
         if event.keysym == "Up":
@@ -281,13 +587,27 @@ class NumberPuzzleGUI:
         # Clear old game board
         self.board = [[0 for _ in range(self.size)] for _ in range(self.size)]
         
-        #Create new board
+        # Create new board with enhanced styling
         for row in range(self.size):
            button_row = []
            for col in range(self.size):
-              button = tk.Button(self.board_frame, text=" ", width=4, height=2,
-                                 command=lambda r=row, c=col: self.make_move(r, c), font=self.number_font)
+              button = tk.Button(
+                  self.board_frame,
+                  text=" ",
+                  width=4,
+                  height=2,
+                  command=lambda r=row, c=col: self.make_move(r, c),
+                  font=self.number_font,
+                  relief="raised",
+                  borderwidth=2,
+                  cursor="hand2"
+              )
               button.grid(row=row, column=col, padx=2, pady=2, sticky='nsew')
+              
+              # Bind hover events
+              button.bind('<Enter>', lambda e, b=button, r=row, c=col: self.on_button_hover(b, r, c))
+              button.bind('<Leave>', lambda e, b=button, r=row, c=col: self.on_button_leave(b, r, c))
+              
               button_row.append(button)
            self.buttons.append(button_row)
         self.apply_theme()
@@ -372,48 +692,71 @@ class NumberPuzzleGUI:
             self.start_time = time.time()
             self.board[row][col] = self.current_number
             self.current_position = (row, col)
-            self.buttons[row][col].config(
-                text=str(self.current_number), 
-                fg=self.themes[self.current_theme]["button_fg"], 
-                bg=self.get_color(self.current_number)
-            )
+            target_color = self.get_color(self.current_number)
+            self.animate_number_placement(row, col, str(self.current_number), target_color)
             self.moves.append((row, col))
             self.current_number += 1
             self.label_info.config(text=f"Current Number: {self.current_number}")
             self.move_counter.config(text=f"Moves: {len(self.moves)}")
+            self.play_sound("move")
             self.highlight_valid_moves()
             self.update_timer()
+            self.update_progress_bar()
+            self.update_move_history()
+            self.draw_path_indicator()
             self.game_history.append(current_state)
             self.analyze_and_update_strategy()
             return
 
         if not self.is_valid_move(row, col):
+            self.play_sound("invalid")
             self.window.after(0, lambda: messagebox.showerror("Invalid Move", "Invalid move! Try again."))
             return
         
         possible_moves = self.get_possible_moves()
         if (row, col) not in possible_moves:
+            self.play_sound("invalid")
             self.window.after(0, lambda: messagebox.showerror("Invalid Move", "Invalid move! Try again."))
             return
 
         self.board[row][col] = self.current_number
         self.current_position = (row, col)
-        self.buttons[row][col].config(
-            text=str(self.current_number), 
-            fg=self.themes[self.current_theme]["button_fg"], 
-            bg=self.get_color(self.current_number)
-        )
+        target_color = self.get_color(self.current_number)
+        self.animate_number_placement(row, col, str(self.current_number), target_color)
         self.moves.append((row, col))
         self.current_number += 1
         self.label_info.config(text=f"Current Number: {self.current_number}")
         self.move_counter.config(text=f"Moves: {len(self.moves)}")
+        self.play_sound("move")
         self.highlight_valid_moves()
         self.update_timer()
+        self.update_progress_bar()
+        self.update_move_history()
+        self.draw_path_indicator()
         self.game_history.append(current_state)
         self.analyze_and_update_strategy()
 
-        if not self.get_possible_moves():
+        # Check if game should end (no possible moves OR board is full)
+        possible_moves = self.get_possible_moves()
+        max_cells = self.size * self.size
+        
+        print(f"Debug: current_number={self.current_number}, max_cells={max_cells}, possible_moves={len(possible_moves)}")
+        
+        # Force end if we've exceeded max cells
+        if self.current_number > max_cells:
+            print(f"Debug: Board is full! Ending game.")
             self.end_game()
+            return
+        
+        # Check if there are actually no valid moves
+        if not possible_moves:
+            print(f"Debug: No possible moves! Ending game.")
+            self.end_game()
+            return
+        
+        # Additional safety check: if current_number is very high and moves are limited
+        if self.current_number > max_cells * 0.9 and len(possible_moves) < 2:
+            print(f"Debug: Very high number ({self.current_number}) with few moves ({len(possible_moves)}). Considering ending game.")
 
     def start_new_game(self):
         self.board = [[0 for _ in range(self.size)] for _ in range(self.size)]
@@ -432,6 +775,9 @@ class NumberPuzzleGUI:
         
         self.btn_undo.config(state=tk.DISABLED)
         self.label_time.config(text="Time: 0 s")
+        
+        # Hide Game Over label
+        self.game_over_label.place_forget()
 
         # Automatically place 1 in the top-left corner (0,0)
         self.make_move(0, 0)
@@ -475,7 +821,22 @@ class NumberPuzzleGUI:
         self.game_over = True
         self.auto_playing = False
         self.elapsed_time = int(time.time() - self.start_time)
-        score = self.current_number - 1
+        
+        # Calculate final score (current_number is the NEXT number to place, so score is current_number - 1)
+        # But if board is full (reached size*size), score should be size*size
+        max_cells = self.size * self.size
+        if self.current_number > max_cells:
+            score = max_cells
+        else:
+            score = self.current_number - 1
+        
+        print(f"Game ended with score: {score}, current_number: {self.current_number}, size: {self.size}")
+        
+        # Display Game Over sign on the board
+        self.game_over_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        # Bring to front of all widgets
+        self.game_over_label.lift()
+        self.game_over_label.tkraise()
         
         # Save game history - updated logging to write a valid JSON list
         game_summary = {
@@ -486,23 +847,62 @@ class NumberPuzzleGUI:
         }
         
         try:
-            # Read existing logs
+            # Read existing logs - handle both JSON array and newline-delimited JSON objects
+            existing_logs = []
             if os.path.exists("game_history.json"):
-                with open("game_history.json", "r") as f:
-                    existing_logs = json.load(f)
-            else:
-                existing_logs = []
+                try:
+                    # Try to read as JSON array first
+                    with open("game_history.json", "r") as f:
+                        existing_logs = json.load(f)
+                        if not isinstance(existing_logs, list):
+                            # If it's not a list, try to read as newline-delimited JSON
+                            existing_logs = []
+                            f.seek(0)
+                            for line in f:
+                                line = line.strip()
+                                if line:
+                                    try:
+                                        existing_logs.append(json.loads(line))
+                                    except json.JSONDecodeError:
+                                        pass
+                except json.JSONDecodeError:
+                    # If JSON parsing fails, try to read as newline-delimited JSON
+                    existing_logs = []
+                    with open("game_history.json", "r") as f:
+                        for line in f:
+                            line = line.strip()
+                            if line:
+                                try:
+                                    existing_logs.append(json.loads(line))
+                                except json.JSONDecodeError:
+                                    pass
+            
             # Append new game summary
             existing_logs.append(game_summary)
-            # Write back the updated logs
+            # Write back the updated logs as a JSON array
             with open("game_history.json", "w") as f:
                 json.dump(existing_logs, f, indent=2)
         except Exception as e:
             print(f"Error saving game history: {e}")
         
         self.label_time.config(text=f"Time: {self.elapsed_time} s")
-        self.window.after(0, lambda: self.check_high_score(score, self.elapsed_time))
+        self.play_sound("win")
+        
+        # Always save statistics
+        self.save_statistics(score)
+        
+        # Check for high score - call directly
+        self.check_high_score(score, self.elapsed_time)
         self.btn_auto.config(text="Auto Play")
+        
+        # Force UI update
+        self.window.update()
+    
+    def test_end_game(self):
+        """Test function to manually trigger game end (for debugging)"""
+        if not self.game_over:
+            print("Manually triggering game end for testing...")
+            self.end_game()
 
     def toggle_auto_play(self):
         if self.game_over:
@@ -645,7 +1045,7 @@ class NumberPuzzleGUI:
         # Diagonal moves
         moves_diagonal = [(-2, -2), (-2, 2), (2, -2), (2, 2)]
         for dr, dc in moves_diagonal:
-            next_row, next_col = row + dr, dc + col
+            next_row, next_col = row + dr, col + dc
             if self.is_valid_position(next_row, next_col) and temp_board[next_row][next_col] == 0:
                 future_moves.append((next_row, next_col))
         
@@ -653,23 +1053,39 @@ class NumberPuzzleGUI:
 
     def check_high_score(self, score, elapsed_time):
         board_key = f"{self.size}x{self.size}"
-        if not self.top_scores[board_key] or len(self.top_scores[board_key]) < 10 or score > self.top_scores[board_key][-1][1]:
-            initials = simpledialog.askstring("High Score", "Enter your initials (3 chars):").upper()
-            if initials and len(initials) == 3:
-              self.top_scores[board_key].append((initials, score, elapsed_time))
-              self.top_scores[board_key].sort(key=lambda item: item[1], reverse=True)
-              self.top_scores[board_key] = self.top_scores[board_key][:10]
-              self.save_scores()
-              self.update_score_list()
-              self.window.after(0, lambda: messagebox.showinfo("Game Over", f"New High Score!\n\nFinal Score: {score} (Time: {elapsed_time}s)"))
-            elif initials:
-                 self.window.after(0, lambda: messagebox.showerror("Initials Error","Please enter 3 initials."))
-                 self.check_high_score(score, elapsed_time)
-
+        scores_list = self.top_scores[board_key]
+        
+        # Check if it's a high score
+        is_high_score = False
+        if len(scores_list) < 10:
+            is_high_score = True
+        elif scores_list and score > scores_list[-1][1]:
+            is_high_score = True
+        
+        if is_high_score:
+            # Show high score dialog
+            initials = simpledialog.askstring("High Score", f"New High Score: {score}!\nEnter your initials (3 chars):").upper()
+            
+            # Handle the dialog result
+            if initials is None:
+                # User cancelled the dialog
+                self.window.after(0, lambda: messagebox.showinfo("Game Over", f"Game Over!\n\nFinal Score: {score} (Time: {elapsed_time}s)\n"))
+            elif initials and len(initials) == 3:
+                # Valid initials
+                self.top_scores[board_key].append((initials, score, elapsed_time))
+                self.top_scores[board_key].sort(key=lambda item: item[1], reverse=True)
+                self.top_scores[board_key] = self.top_scores[board_key][:10]
+                self.save_scores()
+                self.update_score_list()
+                self.window.after(0, lambda: messagebox.showinfo("Game Over", f"New High Score!\n\nFinal Score: {score} (Time: {elapsed_time}s)"))
             else:
-                 self.window.after(0, lambda: messagebox.showinfo("Game Over", f"Game Over!\n\nFinal Score: {score} (Time: {elapsed_time}s)\n"))
+                # Invalid initials (wrong length or empty string)
+                self.window.after(0, lambda: messagebox.showerror("Initials Error","Please enter 3 initials."))
+                # Show game over message
+                self.window.after(0, lambda: messagebox.showinfo("Game Over", f"Game Over!\n\nFinal Score: {score} (Time: {elapsed_time}s)\n"))
         else:
-             self.window.after(0, lambda: messagebox.showinfo("Game Over", f"Game Over!\n\nFinal Score: {score} (Time: {elapsed_time}s)\n"))
+            # Not a high score
+            self.window.after(0, lambda: messagebox.showinfo("Game Over", f"Game Over!\n\nFinal Score: {score} (Time: {elapsed_time}s)\n"))
     
     def update_score_list(self):
         self.score_listbox_10x10.delete(0, tk.END)
@@ -692,23 +1108,80 @@ class NumberPuzzleGUI:
         self.score_lists_frame.config(bg=theme["bg"])
         self.label_info.config(bg=theme["bg"], fg=theme["fg"])
         self.label_time.config(bg=theme["bg"], fg=theme["fg"])
-        self.btn_new_game.config(bg=theme["button_bg"], fg=theme["button_fg"], activebackground=theme["button_active_bg"])
-        self.btn_theme.config(bg=theme["button_bg"], fg=theme["button_fg"], activebackground=theme["button_active_bg"])
+        self.btn_new_game.config(
+            bg=theme["button_bg"],
+            fg=theme["button_fg"],
+            activebackground=theme["button_active_bg"],
+            relief="raised",
+            borderwidth=2,
+            cursor="hand2"
+        )
+        self.btn_theme.config(
+            bg=theme["button_bg"],
+            fg=theme["button_fg"],
+            activebackground=theme["button_active_bg"],
+            relief="raised",
+            borderwidth=2,
+            cursor="hand2"
+        )
+        self.btn_undo.config(
+            bg=theme["button_bg"],
+            fg=theme["button_fg"],
+            activebackground=theme["button_active_bg"],
+            relief="raised",
+            borderwidth=2,
+            cursor="hand2"
+        )
+        self.btn_auto.config(
+            bg=theme["button_bg"],
+            fg=theme["button_fg"],
+            activebackground=theme["button_active_bg"],
+            relief="raised",
+            borderwidth=2,
+            cursor="hand2"
+        )
         self.score_listbox_10x10.config(bg=theme["bg"], fg=theme["fg"])
         self.score_listbox_5x5.config(bg=theme["bg"], fg=theme["fg"])
+        self.progress_bar.config(bg=theme["bg"])
+        self.history_listbox.config(bg=theme["bg"], fg=theme["fg"])
+        self.stats_label.config(bg=theme["bg"], fg=theme["fg"])
+        self.history_frame.config(bg=theme["bg"])
+        self.stats_frame.config(bg=theme["bg"])
+        self.game_over_label.config(bg=theme["bg"])
+        self.btn_help.config(
+            bg=theme["button_bg"],
+            fg=theme["button_fg"],
+            activebackground=theme["button_active_bg"],
+            relief="raised",
+            borderwidth=2,
+            cursor="hand2"
+        )
+        self.btn_sound.config(
+            bg=theme["button_bg"],
+            fg=theme["button_fg"],
+            activebackground=theme["button_active_bg"],
+            relief="raised",
+            borderwidth=2,
+            cursor="hand2"
+        )
         for row in self.buttons:
             for button in row:
-                button.config(bg=theme["button_bg"], fg=theme["button_fg"], activebackground=theme["button_active_bg"])
+                button.config(
+                    bg=theme["button_bg"],
+                    fg=theme["button_fg"],
+                    activebackground=theme["button_active_bg"],
+                    relief="raised",
+                    borderwidth=2
+                )
                 if button["text"] != " ":
                     button.config(fg=theme["button_fg"])
 
     def switch_theme(self):
-        if self.current_theme == "white":
-            self.current_theme = "dark"
-            self.btn_theme.config(text="White Theme")
-        else:
-            self.current_theme = "white"
-            self.btn_theme.config(text="Dark Theme")
+        themes = list(self.themes.keys())
+        current_index = themes.index(self.current_theme)
+        next_index = (current_index + 1) % len(themes)
+        self.current_theme = themes[next_index]
+        self.btn_theme.config(text=self.current_theme.capitalize() + " Theme")
         self.apply_theme()
 
     def run(self):
@@ -785,9 +1258,11 @@ class NumberPuzzleGUI:
             # Remove last move
             last_row, last_col = self.moves.pop()
             self.board[last_row][last_col] = 0
-            self.buttons[last_row][last_col].config(text=" ", 
+            self.buttons[last_row][last_col].config(text=" ",
                 bg=self.themes[self.current_theme]["button_bg"])
             self.current_number -= 1
+            self.update_progress_bar()
+            self.update_move_history()
             
             # Update current position
             self.current_position = self.moves[-1] if self.moves else None
@@ -795,7 +1270,81 @@ class NumberPuzzleGUI:
             # Update displays
             self.label_info.config(text=f"Current Number: {self.current_number}")
             self.move_counter.config(text=f"Moves: {len(self.moves)}")
+            self.update_progress_bar()
+            self.update_move_history()
             self.highlight_valid_moves()
+
+    def on_button_hover(self, button, row, col):
+        """Handle button hover event"""
+        theme = self.themes[self.current_theme]
+        # Only change color if the button is empty
+        if self.board[row][col] == 0:
+            button.config(
+                bg=theme["button_hover_bg"],
+                relief="raised",
+                borderwidth=3
+            )
+
+    def on_button_leave(self, button, row, col):
+        """Handle button leave event"""
+        theme = self.themes[self.current_theme]
+        # Restore original color if the button is empty
+        if self.board[row][col] == 0:
+            button.config(
+                bg=theme["button_bg"],
+                relief="raised",
+                borderwidth=2
+            )
+
+    def animate_number_placement(self, row, col, number, target_color):
+        """Animate the placement of a number with fade-in effect"""
+        button = self.buttons[row][col]
+        theme = self.themes[self.current_theme]
+        
+        # Set the text immediately
+        button.config(text=number)
+        
+        # Parse target color
+        target_r = int(target_color[1:3], 16)
+        target_g = int(target_color[3:5], 16)
+        target_b = int(target_color[5:7], 16)
+        
+        # Start from button background color
+        start_color = theme["button_bg"]
+        start_r = int(start_color[1:3], 16)
+        start_g = int(start_color[3:5], 16)
+        start_b = int(start_color[5:7], 16)
+        
+        # Animate color transition
+        def animate_step(step):
+            if step > self.animation_steps:
+                # Final state
+                button.config(
+                    bg=target_color,
+                    fg=theme["button_fg"],
+                    relief="sunken",
+                    borderwidth=2
+                )
+                return
+            
+            # Calculate intermediate color
+            progress = step / self.animation_steps
+            current_r = int(start_r + (target_r - start_r) * progress)
+            current_g = int(start_g + (target_g - start_g) * progress)
+            current_b = int(start_b + (target_b - start_b) * progress)
+            current_color = f'#{current_r:02x}{current_g:02x}{current_b:02x}'
+            
+            # Apply color
+            button.config(
+                bg=current_color,
+                fg=theme["button_fg"]
+            )
+            
+            # Schedule next step
+            self.window.after(self.animation_speed, lambda: animate_step(step + 1))
+        
+        # Start animation
+        animate_step(0)
 
 if __name__ == "__main__":
     game = NumberPuzzleGUI()
